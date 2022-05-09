@@ -1,3 +1,5 @@
+use std::ops::Neg;
+use std::process::exit;
 use std::time::SystemTime;
 use bevy::app::AppExit;
 use bevy::prelude::*;
@@ -7,13 +9,20 @@ use std::time::Duration;
 use bevy::core::CoreSystem::Time;
 use crate::KeyCode::P;
 
-
-// goal : square changing to random color ever X seconds
+const WIDTH_WINDOW: i32 = 600;
+const HEIGHT_WINDOW: i32 = 800;
 
 fn main() {
     App::new()
         .add_startup_system(setup)
         .add_startup_system(keyboard_input)
+        .add_startup_system(setup_camera)
+        .insert_resource(WindowDescriptor {
+            title: "Square Magic!".to_string(),
+            width: WIDTH_WINDOW as f32,
+            height: HEIGHT_WINDOW as f32,
+            ..default()
+        })
         .insert_resource(
             ColorTimer(Timer::new(Duration::from_secs_f32(1.0),true)))
         .add_plugins(DefaultPlugins)
@@ -23,27 +32,53 @@ fn main() {
         .run();
 }
 
+fn setup_camera(mut commands: Commands) {
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+}
+
 fn setup(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.25, 0.25, 0.75),
-            custom_size: Some(Vec2::new(100.0, 100.0)),
+            custom_size: Some(Vec2::new(50.0, 50.0)),
             ..default()
         },
         ..default()
     })
-        .insert(PongBall);
+        .insert(PongBall { direction: Direction::East, speed: 5. });
 }
 
-fn move_sprite_horizontal(windows: ResMut<Windows>, mut query: Query<&mut Transform, With<PongBall>>) {
+fn move_sprite_horizontal(windows: ResMut<Windows>, mut query: Query<(&mut Transform, &mut PongBall)>) {
     let window = windows.get_primary().unwrap();
-    for mut transform in query.iter_mut() {
-    //     match transform.translation.x {
+    let mut speed = 5.;
+    let x_window_bounds = window.width()/2.;
+
+    for (mut transform, mut pong_ball) in query.iter_mut() {
+        if transform.translation.x.abs() > x_window_bounds {
+            pong_ball.flip_direction();
+        }
+        match pong_ball.direction {
+            Direction::East => {
+                transform.translation.x += pong_ball.speed;
+            }
+            Direction::West => {
+                transform.translation.x -= pong_ball.speed;
+            }
+        }
+
+        //     match transform.translation.x {
     //         x > *window  => {}
     //         _ => {}
     //     }
-        transform.translation.x += 3.;
+    //     if transform.translation.x >= window.width() {
+    //         transform.translation.x -= move_x;
+    //         println!("left")
+    //     } else if transform.translation.x >= window.width().neg() {
+    //         transform.translation.x += move_x;
+    //         println!("right")
+    //     }
+
     }
 }
 
@@ -79,4 +114,25 @@ fn keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<&mut Sprite>) {
 }
 
 #[derive(Component)]
-struct PongBall;
+struct PongBall {
+    direction: Direction,
+    speed: f32,
+}
+
+impl PongBall {
+    fn flip_direction(&mut self) {
+        match self.direction {
+            Direction::West => {
+                self.direction = Direction::East
+            }
+            Direction::East => {
+                self.direction = Direction::West
+            }
+        }
+    }
+}
+
+enum Direction {
+    East,
+    West
+}
