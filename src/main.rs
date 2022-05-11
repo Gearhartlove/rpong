@@ -13,11 +13,11 @@ use crate::KeyCode::P;
 const WIDTH_WINDOW: i32 = 600;
 const HEIGHT_WINDOW: i32 = 800;
 const PADDLE_OFFSET: i32 =  50;
+const PADDLE_SPEED:  i32 = 5; // todo: tune
 
 fn main() {
     App::new()
         .add_startup_system(setup)
-        .add_startup_system(keyboard_input)
         .add_startup_system(setup_camera)
         .insert_resource(WindowDescriptor {
             title: "Square Magic!".to_string(),
@@ -28,6 +28,7 @@ fn main() {
         .insert_resource(
             ColorTimer(Timer::new(Duration::from_secs_f32(1.0),true)))
         .add_plugins(DefaultPlugins)
+        .add_system(keyboard_input)
         .add_system(timer_change_color)
         .add_system(move_sprite_horizontal)
         .add_system(pong_collision)
@@ -44,11 +45,11 @@ fn setup(mut commands: Commands) {
     commands.spawn_bundle( SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.75, 0.28, 0.65),
-            custom_size: Some(Vec2::new(200., HEIGHT_WINDOW as f32)),
+            custom_size: Some(Vec2::new(50., 200.)),
             ..default()
         },
         transform: Transform {
-            translation: Vec3::new(-(WIDTH_WINDOW as f32)/2., 0., 0.),
+            translation: Vec3::new(-(WIDTH_WINDOW as f32)/2. + PADDLE_OFFSET as f32, 0., 0.),
             ..default()
         },
         ..default()
@@ -100,19 +101,6 @@ fn move_sprite_horizontal(windows: ResMut<Windows>, mut query: Query<(&mut Trans
 
             _ => {}
         }
-
-        //     match transform.translation.x {
-    //         x > *window  => {}
-    //         _ => {}
-    //     }
-    //     if transform.translation.x >= window.width() {
-    //         transform.translation.x -= move_x;
-    //         println!("left")
-    //     } else if transform.translation.x >= window.width().neg() {
-    //         transform.translation.x += move_x;
-    //         println!("right")
-    //     }
-
     }
 }
 
@@ -138,12 +126,16 @@ fn change_color(color: &mut Color) {
     *color.set_b(rand::random::<f32>());
 }
 
-fn keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<&mut Sprite>) {
-    if keys.just_pressed(KeyCode::Space) {
-        println!("Space pressed {:?}", SystemTime::now());
-        // for mut sprite in query.iter_mut() {
-            // change_color(&mut sprite.color)
-        // }
+fn keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<&mut Transform, With<Paddle>>) {
+    if keys.any_pressed([KeyCode::W, KeyCode::Up]) {
+        for mut paddle in query.iter_mut() {
+            paddle.translation.y += PADDLE_SPEED as f32;
+        }
+    }
+    if keys.any_pressed([KeyCode::S, KeyCode::Down]) {
+        for mut paddle in query.iter_mut() {
+            paddle.translation.y -= PADDLE_SPEED as f32;
+        }
     }
 }
 
@@ -226,7 +218,6 @@ fn pong_collision(mut ball_query: Query<(&mut Transform, &Sprite, &mut PongBall)
             // check for collision between pong ball and paddle
             if let Some(c) =
                 collide(pong_pos, pong_size, paddle_pos, paddle_size) {
-                println!("{:?}", c);
                 pong_ball.flip_horizontal_direction();
             }
         }
