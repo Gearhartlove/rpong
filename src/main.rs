@@ -15,6 +15,7 @@ const HEIGHT_WINDOW: i32 = 800;
 const PADDLE_X_OFFSET: i32 = 50;
 const PADDLE_Y_OFFSET: i32 = 5;
 const PADDLE_SPEED: i32 = 5;
+const PADDLE_HEIGHT: i32 = 200;
 
 fn main() {
     App::new()
@@ -33,6 +34,7 @@ fn main() {
         .add_system(timer_change_color)
         .add_system(move_sprite_horizontal)
         .add_system(pong_collision)
+        .add_system(bound_paddle)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }
@@ -46,7 +48,7 @@ fn setup(mut commands: Commands) {
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.75, 0.28, 0.65),
-            custom_size: Some(Vec2::new(50., 200.)),
+            custom_size: Some(Vec2::new(50., PADDLE_HEIGHT as f32)),
             ..default()
         },
         transform: Transform {
@@ -134,18 +136,22 @@ fn keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Transform, &
         for (mut paddle, sprite) in query.iter_mut() {
             if paddle.is_bounded() {
                 paddle.translation.y += PADDLE_SPEED as f32;
-            } else {
-                paddle.translation.y = (HEIGHT_WINDOW as f32 / 2.) - PADDLE_Y_OFFSET as f32 - PADDLE_SPEED  as f32 - sprite.custom_size.unwrap().y / 2.;
             }
+            // } else {
+            //     let close_to_north_boundry = (HEIGHT_WINDOW as f32 / 2.) - PADDLE_Y_OFFSET as f32 - PADDLE_SPEED as f32 - sprite.custom_size.unwrap().y / 2.;
+            //     paddle.translation.y = close_to_north_boundry;
+            // }
         }
     }
-    if keys.any_pressed([KeyCode::S, KeyCode::Down]) {
+    else if keys.any_pressed([KeyCode::S, KeyCode::Down]) {
         for (mut paddle, sprite) in query.iter_mut() {
             if paddle.is_bounded() {
                 paddle.translation.y -= PADDLE_SPEED as f32;
-            } else {
-                paddle.translation.y = (HEIGHT_WINDOW as f32 / 2.).neg() + PADDLE_Y_OFFSET as f32 + PADDLE_SPEED as f32 + sprite.custom_size.unwrap().y / 2.;
             }
+            // } else {
+            //     let close_to_south_boundry = (HEIGHT_WINDOW as f32 / 2.).neg() + PADDLE_Y_OFFSET as f32 + PADDLE_SPEED as f32 + sprite.custom_size.unwrap().y / 2.;
+            //     paddle.translation.y = close_to_south_boundry;
+            // }
         }
     }
 }
@@ -236,6 +242,7 @@ fn pong_collision(mut ball_query: Query<(&mut Transform, &Sprite, &mut PongBall)
 
 trait Bounded {
     fn is_bounded(&self) -> bool;
+    fn correct_bound(&mut self);
 }
 
 impl Bounded for Transform {
@@ -245,6 +252,27 @@ impl Bounded for Transform {
             true
         } else {
             false
+        }
+    }
+
+    fn correct_bound(&mut self) {
+        let arbitrary_shift = 0.01;
+        let boundry_reset = (HEIGHT_WINDOW as f32 / 2.)
+            - PADDLE_Y_OFFSET as f32 - arbitrary_shift - PADDLE_HEIGHT as f32 / 2.;
+        if self.translation.y < 0. {
+            self.translation.y = -boundry_reset;
+        } else {
+            self.translation.y = boundry_reset;
+        }
+    }
+}
+
+
+fn bound_paddle(mut query: Query<&mut Transform, With<Paddle>>) {
+    for mut transform in query.iter_mut() {
+        // if not bounded, correct the bound
+        if !transform.is_bounded() {
+            transform.correct_bound()
         }
     }
 }
