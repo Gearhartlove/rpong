@@ -12,8 +12,9 @@ use crate::KeyCode::P;
 
 const WIDTH_WINDOW: i32 = 600;
 const HEIGHT_WINDOW: i32 = 800;
-const PADDLE_OFFSET: i32 =  50;
-const PADDLE_SPEED:  i32 = 5; // todo: tune
+const PADDLE_X_OFFSET: i32 = 50;
+const PADDLE_Y_OFFSET: i32 = 5;
+const PADDLE_SPEED: i32 = 5;
 
 fn main() {
     App::new()
@@ -26,7 +27,7 @@ fn main() {
             ..default()
         })
         .insert_resource(
-            ColorTimer(Timer::new(Duration::from_secs_f32(1.0),true)))
+            ColorTimer(Timer::new(Duration::from_secs_f32(1.0), true)))
         .add_plugins(DefaultPlugins)
         .add_system(keyboard_input)
         .add_system(timer_change_color)
@@ -42,14 +43,14 @@ fn setup_camera(mut commands: Commands) {
 
 fn setup(mut commands: Commands) {
     // paddle right
-    commands.spawn_bundle( SpriteBundle {
+    commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.75, 0.28, 0.65),
             custom_size: Some(Vec2::new(50., 200.)),
             ..default()
         },
         transform: Transform {
-            translation: Vec3::new(-(WIDTH_WINDOW as f32)/2. + PADDLE_OFFSET as f32, 0., 0.),
+            translation: Vec3::new(-(WIDTH_WINDOW as f32) / 2. + PADDLE_X_OFFSET as f32, 0., 0.),
             ..default()
         },
         ..default()
@@ -70,8 +71,8 @@ fn setup(mut commands: Commands) {
 fn move_sprite_horizontal(windows: ResMut<Windows>, mut query: Query<(&mut Transform, &mut PongBall)>) {
     let window = windows.get_primary().unwrap();
     let mut speed = 5.;
-    let x_window_bounds = window.width()/2.;
-    let y_window_bounds = window.height()/2.;
+    let x_window_bounds = window.width() / 2.;
+    let y_window_bounds = window.height() / 2.;
 
     for (mut transform, mut pong_ball) in query.iter_mut() {
         if transform.translation.x.abs() > x_window_bounds {
@@ -126,15 +127,25 @@ fn change_color(color: &mut Color) {
     *color.set_b(rand::random::<f32>());
 }
 
-fn keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<&mut Transform, With<Paddle>>) {
+// todo: fix bounds of paddle
+fn keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Transform, &Sprite), With<Paddle>>) {
+    let offset = 1.;
     if keys.any_pressed([KeyCode::W, KeyCode::Up]) {
-        for mut paddle in query.iter_mut() {
-            paddle.translation.y += PADDLE_SPEED as f32;
+        for (mut paddle, sprite) in query.iter_mut() {
+            if paddle.is_bounded() {
+                paddle.translation.y += PADDLE_SPEED as f32;
+            } else {
+                paddle.translation.y = (HEIGHT_WINDOW as f32 / 2.) - PADDLE_Y_OFFSET as f32 - PADDLE_SPEED  as f32 - sprite.custom_size.unwrap().y / 2.;
+            }
         }
     }
     if keys.any_pressed([KeyCode::S, KeyCode::Down]) {
-        for mut paddle in query.iter_mut() {
-            paddle.translation.y -= PADDLE_SPEED as f32;
+        for (mut paddle, sprite) in query.iter_mut() {
+            if paddle.is_bounded() {
+                paddle.translation.y -= PADDLE_SPEED as f32;
+            } else {
+                paddle.translation.y = (HEIGHT_WINDOW as f32 / 2.).neg() + PADDLE_Y_OFFSET as f32 + PADDLE_SPEED as f32 + sprite.custom_size.unwrap().y / 2.;
+            }
         }
     }
 }
@@ -183,7 +194,6 @@ impl PongBall {
         let n: f32 = rng.gen();
         self.vertical_speed += self.vertical_speed * n;
     }
-
 }
 
 impl Default for PongBall {
@@ -191,7 +201,7 @@ impl Default for PongBall {
         Self {
             horizontal_direction: Direction::West,
             vertical_direction: Direction::South,
-            horizontal_speed: 1.5,
+            horizontal_speed: 1.2,
             vertical_speed: 1.,
         }
     }
@@ -201,14 +211,14 @@ enum Direction {
     North,
     South,
     East,
-    West
+    West,
 }
 
 #[derive(Component)]
 struct Paddle;
 
 fn pong_collision(mut ball_query: Query<(&mut Transform, &Sprite, &mut PongBall), Without<Paddle>>,
-                    mut paddle_query: Query<(&Transform, &Sprite), With<Paddle>>) {
+                  mut paddle_query: Query<(&Transform, &Sprite), With<Paddle>>) {
     for (mut pong_transform, sprite, mut pong_ball) in ball_query.iter_mut() {
         let pong_pos = pong_transform.translation.clone();
         let pong_size = sprite.custom_size.unwrap().clone();
@@ -217,14 +227,24 @@ fn pong_collision(mut ball_query: Query<(&mut Transform, &Sprite, &mut PongBall)
             let paddle_size = sprite.custom_size.unwrap().clone();
             // check for collision between pong ball and paddle
             if let Some(c) =
-                collide(pong_pos, pong_size, paddle_pos, paddle_size) {
+            collide(pong_pos, pong_size, paddle_pos, paddle_size) {
                 pong_ball.flip_horizontal_direction();
             }
         }
     }
 }
 
+trait Bounded {
+    fn is_bounded(&self) -> bool;
+}
 
-
-
-
+impl Bounded for Transform {
+    fn is_bounded(&self) -> bool {
+        let paddle_offset = (WIDTH_WINDOW as f32 / 2.) - PADDLE_Y_OFFSET as f32;
+        if self.translation.y.abs() < paddle_offset {
+            true
+        } else {
+            false
+        }
+    }
+}
