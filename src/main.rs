@@ -30,9 +30,10 @@ fn main() {
         .insert_resource(
             ColorTimer(Timer::new(Duration::from_secs_f32(1.0), true)))
         .add_plugins(DefaultPlugins)
-        .add_system(keyboard_input)
+        .add_system(player_two_keyboard_input)
+        .add_system(player_one_keyboard_input)
         .add_system(timer_change_color)
-        .add_system(move_sprite_horizontal)
+        .add_system(move_pong_ball)
         .add_system(pong_collision)
         .add_system(bound_paddle)
         .add_system(bevy::input::system::exit_on_esc_system)
@@ -44,10 +45,25 @@ fn setup_camera(mut commands: Commands) {
 }
 
 fn setup(mut commands: Commands) {
-    // paddle right
+    // left paddle
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.75, 0.28, 0.65),
+            custom_size: Some(Vec2::new(50., PADDLE_HEIGHT as f32)),
+            ..default()
+        },
+        transform: Transform {
+            translation: Vec3::new((WIDTH_WINDOW as f32) / 2. - PADDLE_X_OFFSET as f32, 0., 0.),
+            ..default()
+        },
+        ..default()
+    })
+        .insert(Paddle)
+        .insert(PlayerTwo);
+    // right paddle
+    commands.spawn_bundle(SpriteBundle {
+        sprite: Sprite {
+            color: Color::rgb(0.35, 0.68, 0.65),
             custom_size: Some(Vec2::new(50., PADDLE_HEIGHT as f32)),
             ..default()
         },
@@ -57,8 +73,9 @@ fn setup(mut commands: Commands) {
         },
         ..default()
     })
-        .insert(Paddle);
-    //pong ball
+        .insert(Paddle)
+        .insert(PlayerOne);
+    // pong ball
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.25, 0.25, 0.75),
@@ -70,9 +87,8 @@ fn setup(mut commands: Commands) {
         .insert(PongBall::default());
 }
 
-fn move_sprite_horizontal(windows: ResMut<Windows>, mut query: Query<(&mut Transform, &mut PongBall)>) {
+fn move_pong_ball(windows: ResMut<Windows>, mut query: Query<(&mut Transform, &mut PongBall)>) {
     let window = windows.get_primary().unwrap();
-    let mut speed = 5.;
     let x_window_bounds = window.width() / 2.;
     let y_window_bounds = window.height() / 2.;
 
@@ -129,29 +145,38 @@ fn change_color(color: &mut Color) {
     *color.set_b(rand::random::<f32>());
 }
 
-// todo: fix bounds of paddle
-fn keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Transform, &Sprite), With<Paddle>>) {
+fn player_one_keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Transform, &Sprite), (With<Paddle>, With<PlayerOne>)>) {
     let offset = 1.;
-    if keys.any_pressed([KeyCode::W, KeyCode::Up]) {
+    if keys.any_pressed([KeyCode::W]) {
         for (mut paddle, sprite) in query.iter_mut() {
             if paddle.is_bounded() {
                 paddle.translation.y += PADDLE_SPEED as f32;
             }
-            // } else {
-            //     let close_to_north_boundry = (HEIGHT_WINDOW as f32 / 2.) - PADDLE_Y_OFFSET as f32 - PADDLE_SPEED as f32 - sprite.custom_size.unwrap().y / 2.;
-            //     paddle.translation.y = close_to_north_boundry;
-            // }
         }
     }
-    else if keys.any_pressed([KeyCode::S, KeyCode::Down]) {
+    else if keys.any_pressed([KeyCode::S]) {
         for (mut paddle, sprite) in query.iter_mut() {
             if paddle.is_bounded() {
                 paddle.translation.y -= PADDLE_SPEED as f32;
             }
-            // } else {
-            //     let close_to_south_boundry = (HEIGHT_WINDOW as f32 / 2.).neg() + PADDLE_Y_OFFSET as f32 + PADDLE_SPEED as f32 + sprite.custom_size.unwrap().y / 2.;
-            //     paddle.translation.y = close_to_south_boundry;
-            // }
+        }
+    }
+}
+
+fn player_two_keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Transform, &Sprite), (With<Paddle>, With<PlayerTwo>)>) {
+    let offset = 1.;
+    if keys.any_pressed([KeyCode::Up]) {
+        for (mut paddle, sprite) in query.iter_mut() {
+            if paddle.is_bounded() {
+                paddle.translation.y += PADDLE_SPEED as f32;
+            }
+        }
+    }
+    else if keys.any_pressed([KeyCode::Down]) {
+        for (mut paddle, sprite) in query.iter_mut() {
+            if paddle.is_bounded() {
+                paddle.translation.y -= PADDLE_SPEED as f32;
+            }
         }
     }
 }
@@ -276,3 +301,8 @@ fn bound_paddle(mut query: Query<&mut Transform, With<Paddle>>) {
         }
     }
 }
+
+#[derive(Component)]
+struct PlayerOne;
+#[derive(Component)]
+struct PlayerTwo;
