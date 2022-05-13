@@ -21,8 +21,9 @@ fn main() {
     App::new()
         .add_startup_system(setup)
         .add_startup_system(setup_camera)
+        .add_startup_system(load_ui_font)
         .insert_resource(WindowDescriptor {
-            title: "Square Magic!".to_string(),
+            title: "rpong".to_string(),
             width: WIDTH_WINDOW as f32,
             height: HEIGHT_WINDOW as f32,
             ..default()
@@ -44,7 +45,7 @@ fn setup_camera(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // left paddle
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
@@ -59,6 +60,24 @@ fn setup(mut commands: Commands) {
         ..default()
     })
         .insert(Paddle)
+        .insert(PlayerTwo);
+    // left text
+    commands.spawn_bundle(TextBundle {
+        transform: Transform {
+            translation: Vec3::new(-50., 0., 0.),
+            ..default()
+        },
+        text: Text::with_section(
+            "0",
+            TextStyle {
+                font: asset_server.get_handle("JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf"),
+                font_size: 12.,
+                color: Color::ANTIQUE_WHITE
+            },
+            TextAlignment::default(),
+        ),
+        ..default()
+    })
         .insert(PlayerTwo);
     // right paddle
     commands.spawn_bundle(SpriteBundle {
@@ -75,6 +94,8 @@ fn setup(mut commands: Commands) {
     })
         .insert(Paddle)
         .insert(PlayerOne);
+    // right text
+
     // pong ball
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
@@ -85,6 +106,7 @@ fn setup(mut commands: Commands) {
         ..default()
     })
         .insert(PongBall::default());
+
 }
 
 fn move_pong_ball(windows: ResMut<Windows>, mut query: Query<(&mut Transform, &mut PongBall)>) {
@@ -306,3 +328,11 @@ fn bound_paddle(mut query: Query<&mut Transform, With<Paddle>>) {
 struct PlayerOne;
 #[derive(Component)]
 struct PlayerTwo;
+
+// todo: load the jetbrains mono font into asset server and load it on line 73
+// learn: https://bevy-cheatbook.github.io/assets/assetserver.html
+struct UIFont(Handle<Font>);
+fn load_ui_font(mut commands: Commands, server: Res<AssetServer>) {
+    let handle: Handle<Font> = server.load("JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf");
+    // commands.insert_resource(UIFont(handle));
+}
