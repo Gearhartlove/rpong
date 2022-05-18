@@ -21,7 +21,7 @@ fn main() {
     App::new()
         .add_startup_system(setup)
         .add_startup_system(setup_camera)
-        .add_startup_system(load_ui_font)
+        // .add_startup_system(load_ui_font)
         .insert_resource(WindowDescriptor {
             title: "rpong".to_string(),
             width: WIDTH_WINDOW as f32,
@@ -43,6 +43,7 @@ fn main() {
 
 fn setup_camera(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    commands.spawn_bundle(UiCameraBundle::default());
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -63,18 +64,31 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(PlayerTwo);
     // left text
     commands.spawn_bundle(TextBundle {
-        transform: Transform {
-            translation: Vec3::new(-50., 0., 0.),
+        style: Style {
+            align_self: AlignSelf::FlexEnd,
+            position_type: PositionType::Absolute,
+            position: Rect {
+                bottom: Val::Px(5.0),
+                right: Val::Px(15.0),
+                ..default()
+            },
             ..default()
         },
+        // transform: Transform {
+        //     translation: Vec3::new(-50., 0., 0.),
+        //     ..default()
+        // },
         text: Text::with_section(
-            "0",
+            "rpong",
             TextStyle {
-                font: asset_server.get_handle("JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf"),
-                font_size: 12.,
+                font: asset_server.load("JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf"),
+                font_size: 100.,
                 color: Color::ANTIQUE_WHITE
             },
-            TextAlignment::default(),
+            TextAlignment {
+                horizontal: HorizontalAlign::Center,
+                ..default()
+            }
         ),
         ..default()
     })
@@ -213,6 +227,11 @@ struct PongBall {
 
 impl PongBall {
     fn flip_horizontal_direction(&mut self) {
+        let mut rng = rand::thread_rng();
+        let n: f32 = rng.gen();
+        self.vertical_speed += self.horizontal_speed * n;
+        println!("{}", self.vertical_speed.clone());
+
         match self.horizontal_direction {
             Direction::West => {
                 self.horizontal_direction = Direction::East
@@ -254,7 +273,7 @@ impl Default for PongBall {
         Self {
             horizontal_direction: Direction::West,
             vertical_direction: Direction::South,
-            horizontal_speed: 1.2,
+            horizontal_speed: 5.,
             vertical_speed: 1.,
         }
     }
@@ -334,5 +353,5 @@ struct PlayerTwo;
 struct UIFont(Handle<Font>);
 fn load_ui_font(mut commands: Commands, server: Res<AssetServer>) {
     let handle: Handle<Font> = server.load("JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf");
-    // commands.insert_resource(UIFont(handle));
+    commands.insert_resource(UIFont(handle));
 }
