@@ -1,14 +1,14 @@
+use std::borrow::BorrowMut;
 use std::ops::Neg;
 use std::process::exit;
 use std::time::SystemTime;
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use bevy::prelude::{Query, Color, Timer};
-use rand::Rng;
+use rand::{Rng, thread_rng};
 use std::time::Duration;
 use bevy::core::CoreSystem::Time;
 use bevy::sprite::collide_aabb::collide;
-use crate::KeyCode::P;
 
 const WIDTH_WINDOW: i32 = 600;
 const HEIGHT_WINDOW: i32 = 800;
@@ -16,6 +16,10 @@ const PADDLE_X_OFFSET: i32 = 50;
 const PADDLE_Y_OFFSET: i32 = 5;
 const PADDLE_SPEED: i32 = 5;
 const PADDLE_HEIGHT: i32 = 200;
+const FONT_PATH: &str = "JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf";
+const TEXT_OFFSET: f32 = 40.;
+const PONG_BALL_MAX_SPEED: f32 = 10.;
+const SPEED_SCALING: f32 = 0.26;
 
 fn main() {
     App::new()
@@ -30,6 +34,9 @@ fn main() {
         })
         .insert_resource(
             ColorTimer(Timer::new(Duration::from_secs_f32(1.0), true)))
+        .insert_resource(
+            Scoreboard::default()
+        )
         .add_plugins(DefaultPlugins)
         .add_system(player_two_keyboard_input)
         .add_system(player_one_keyboard_input)
@@ -62,37 +69,87 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     })
         .insert(Paddle)
         .insert(PlayerTwo);
+    // rpong text
+    commands.spawn_bundle(TextBundle {
+        style: Style {
+            align_self: AlignSelf::FlexEnd,
+            position_type: PositionType::Absolute,
+            position: Rect {
+                bottom: Val::Px(2.),
+                right: Val::Px(15.0 / 2.),
+                ..default()
+            },
+            ..default()
+        },
+        text: Text::with_section(
+            "rpong",
+            TextStyle {
+                font: asset_server.load(FONT_PATH),
+                font_size: 100.,
+                color: Color::ANTIQUE_WHITE,
+            },
+            TextAlignment {
+                horizontal: HorizontalAlign::Center,
+                ..default()
+            },
+        ),
+        ..default()
+    });
     // left text
     commands.spawn_bundle(TextBundle {
         style: Style {
             align_self: AlignSelf::FlexEnd,
             position_type: PositionType::Absolute,
             position: Rect {
-                bottom: Val::Px(5.0),
-                right: Val::Px(15.0),
+                bottom: Val::Px(HEIGHT_WINDOW as f32 / 2.),
+                right: Val::Px(WIDTH_WINDOW as f32 / 2. + TEXT_OFFSET),
                 ..default()
             },
             ..default()
         },
-        // transform: Transform {
-        //     translation: Vec3::new(-50., 0., 0.),
-        //     ..default()
-        // },
         text: Text::with_section(
-            "rpong",
+            "0",
             TextStyle {
-                font: asset_server.load("JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf"),
-                font_size: 100.,
-                color: Color::ANTIQUE_WHITE
+                font: asset_server.load(FONT_PATH),
+                font_size: 25.,
+                color: Color::ANTIQUE_WHITE,
             },
             TextAlignment {
                 horizontal: HorizontalAlign::Center,
                 ..default()
-            }
+            },
         ),
         ..default()
     })
         .insert(PlayerTwo);
+    // right text
+    // left text
+    commands.spawn_bundle(TextBundle {
+        style: Style {
+            align_self: AlignSelf::FlexEnd,
+            position_type: PositionType::Absolute,
+            position: Rect {
+                bottom: Val::Px(HEIGHT_WINDOW as f32 / 2.),
+                right: Val::Px(WIDTH_WINDOW as f32 / 2. - TEXT_OFFSET),
+                ..default()
+            },
+            ..default()
+        },
+        text: Text::with_section(
+            "0",
+            TextStyle {
+                font: asset_server.load(FONT_PATH),
+                font_size: 25.,
+                color: Color::ANTIQUE_WHITE,
+            },
+            TextAlignment {
+                horizontal: HorizontalAlign::Center,
+                ..default()
+            },
+        ),
+        ..default()
+    })
+        .insert(PlayerOne);
     // right paddle
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
@@ -108,8 +165,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     })
         .insert(Paddle)
         .insert(PlayerOne);
-    // right text
-
     // pong ball
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
@@ -120,23 +175,54 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         ..default()
     })
         .insert(PongBall::default());
-
 }
 
-fn move_pong_ball(windows: ResMut<Windows>, mut query: Query<(&mut Transform, &mut PongBall)>) {
+fn move_pong_ball(
+    windows: ResMut<Windows>, mut scoreboard: ResMut<Scoreboard>,
+    mut pong_query: Query<(&mut Transform, &mut PongBall)>,
+    mut p1_text_query: Query<&mut Text, (With<PlayerOne>, Without<PlayerTwo>)>,
+    mut p2_text_query: Query<&mut Text, (With<PlayerTwo>, Without<PlayerOne>)>
+    ){
     let window = windows.get_primary().unwrap();
     let x_window_bounds = window.width() / 2.;
     let y_window_bounds = window.height() / 2.;
 
-    for (mut transform, mut pong_ball) in query.iter_mut() {
+    for (mut transform, mut pong_ball) in pong_query.iter_mut() {
         if transform.translation.x.abs() > x_window_bounds {
             pong_ball.flip_horizontal_direction();
             pong_ball.increase_horizontal_speed();
+
+            let update_score = |new_score: &mut i32, text_to_update: &mut Text| {
+                const POINT_VALUE: i32 = 1;
+                *new_score += POINT_VALUE;
+                let new_text_val: String = new_score.to_string();
+                text_to_update.sections[0].value = new_text_val;
+            };
+
+            // Updating OnScreenScoreboard
+            // check if left side or right side of the screen
+            if transform.translation.x < 0. {
+                for mut text in p1_text_query.iter_mut() {
+                    update_score(scoreboard.p1_score.borrow_mut(), &mut text);
+                }
+            }
+            else {
+                for mut text in p2_text_query.iter_mut() {
+                    update_score(scoreboard.p2_score.borrow_mut(), &mut text);
+                }
+            }
+
+            transform.translation.x = 0.;
+            transform.translation.y = 0.;
+            pong_ball.randomize_direction();
+            pong_ball.reset_speed();
         }
+
         if transform.translation.y.abs() > y_window_bounds {
             pong_ball.flip_vertical_direction();
             pong_ball.increase_vertical_speed();
         }
+
         match pong_ball.horizontal_direction {
             Direction::East => {
                 transform.translation.x += pong_ball.horizontal_speed;
@@ -153,7 +239,6 @@ fn move_pong_ball(windows: ResMut<Windows>, mut query: Query<(&mut Transform, &m
             Direction::South => {
                 transform.translation.y -= pong_ball.vertical_speed;
             }
-
             _ => {}
         }
     }
@@ -182,15 +267,14 @@ fn change_color(color: &mut Color) {
 }
 
 fn player_one_keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<(&mut Transform, &Sprite), (With<Paddle>, With<PlayerOne>)>) {
-    let offset = 1.;
+    let qwaoffset = 1.;
     if keys.any_pressed([KeyCode::W]) {
         for (mut paddle, sprite) in query.iter_mut() {
             if paddle.is_bounded() {
                 paddle.translation.y += PADDLE_SPEED as f32;
             }
         }
-    }
-    else if keys.any_pressed([KeyCode::S]) {
+    } else if keys.any_pressed([KeyCode::S]) {
         for (mut paddle, sprite) in query.iter_mut() {
             if paddle.is_bounded() {
                 paddle.translation.y -= PADDLE_SPEED as f32;
@@ -207,8 +291,7 @@ fn player_two_keyboard_input(keys: Res<Input<KeyCode>>, mut query: Query<(&mut T
                 paddle.translation.y += PADDLE_SPEED as f32;
             }
         }
-    }
-    else if keys.any_pressed([KeyCode::Down]) {
+    } else if keys.any_pressed([KeyCode::Down]) {
         for (mut paddle, sprite) in query.iter_mut() {
             if paddle.is_bounded() {
                 paddle.translation.y -= PADDLE_SPEED as f32;
@@ -230,7 +313,6 @@ impl PongBall {
         let mut rng = rand::thread_rng();
         let n: f32 = rng.gen();
         self.vertical_speed += self.horizontal_speed * n;
-        println!("{}", self.vertical_speed.clone());
 
         match self.horizontal_direction {
             Direction::West => {
@@ -255,16 +337,41 @@ impl PongBall {
         }
     }
 
+    // todo: clamp speed
     fn increase_horizontal_speed(&mut self) {
-        let mut rng = rand::thread_rng();
-        let n: f32 = rng.gen();
-        self.horizontal_speed += self.horizontal_speed * n;
+        if self.horizontal_speed < PONG_BALL_MAX_SPEED {
+            self.horizontal_speed += self.horizontal_speed * SPEED_SCALING ;
+        }
     }
 
     fn increase_vertical_speed(&mut self) {
-        let mut rng = rand::thread_rng();
-        let n: f32 = rng.gen();
-        self.vertical_speed += self.vertical_speed * n;
+        if self.vertical_speed < PONG_BALL_MAX_SPEED {
+            self.vertical_speed += self.vertical_speed * SPEED_SCALING ;
+        }
+    }
+
+    fn reset_speed(&mut self) {
+        self.horizontal_speed = PongBall::default().horizontal_speed;
+        self.vertical_speed = PongBall::default().vertical_speed;
+    }
+
+    fn randomize_direction(&mut self) {
+        let random_horizontal_direction = || -> Direction {
+            let mut rng =  thread_rng();
+            match rng.gen_range(0..=1) {
+                0 => Direction::East,
+                _ => Direction::West,
+            }
+        };
+        let random_vertical_direction = || -> Direction {
+            let mut rng =  thread_rng();
+            match rng.gen_range(0..=1) {
+                0 => Direction::North,
+                _ => Direction::South,
+            }
+        };
+        self.horizontal_direction = random_horizontal_direction();
+        self.vertical_direction = random_vertical_direction();
     }
 }
 
@@ -343,15 +450,30 @@ fn bound_paddle(mut query: Query<&mut Transform, With<Paddle>>) {
     }
 }
 
+// todo: Refactor Player logic
+// #[derive(Component)]
+// enum Player {
+//     PlayerOne,
+//     PlayerTwo,
+// }
+
 #[derive(Component)]
 struct PlayerOne;
+
 #[derive(Component)]
 struct PlayerTwo;
 
-// todo: load the jetbrains mono font into asset server and load it on line 73
-// learn: https://bevy-cheatbook.github.io/assets/assetserver.html
-struct UIFont(Handle<Font>);
-fn load_ui_font(mut commands: Commands, server: Res<AssetServer>) {
-    let handle: Handle<Font> = server.load("JetBrainsMono-2.242/fonts/ttf/JetBrainsMono-Medium.ttf");
-    commands.insert_resource(UIFont(handle));
+#[derive(Component)]
+struct Scoreboard {
+    p1_score: i32,
+    p2_score: i32,
+}
+
+impl Default for Scoreboard {
+    fn default() -> Self {
+        Scoreboard {
+            p1_score: 0,
+            p2_score: 0,
+        }
+    }
 }
